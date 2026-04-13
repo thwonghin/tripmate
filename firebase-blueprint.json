@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "Trip": {
+      "title": "Trip",
+      "description": "A travel journey containing itinerary and expenses.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the trip" },
+        "startDate": { "type": "string", "format": "date-time", "description": "Start date of the trip" },
+        "endDate": { "type": "string", "format": "date-time", "description": "End date of the trip" },
+        "budget": { "type": "number", "description": "Total budget for the trip" },
+        "baseCurrency": { "type": "string", "description": "Base currency for the trip (e.g. USD, HKD)" },
+        "ownerId": { "type": "string", "description": "UID of the user who owns this trip" },
+        "collaborators": { "type": "array", "items": { "type": "string" }, "description": "List of UIDs who can edit this trip" },
+        "collaboratorEmails": { "type": "array", "items": { "type": "string" }, "description": "List of emails who can edit this trip" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "startDate", "endDate", "ownerId"]
+    },
+    "ItineraryItem": {
+      "title": "Itinerary Item",
+      "description": "A scheduled activity during a trip.",
+      "type": "object",
+      "properties": {
+        "tripId": { "type": "string", "description": "Reference to the trip" },
+        "title": { "type": "string", "description": "Activity title" },
+        "startTime": { "type": "string", "format": "date-time", "description": "When the activity starts" },
+        "endTime": { "type": "string", "format": "date-time", "description": "When the activity ends" },
+        "location": { "type": "string", "description": "Where the activity takes place" },
+        "notes": { "type": "string", "description": "Additional details" },
+        "type": { "type": "string", "enum": ["flight", "hotel", "activity", "transport", "food"], "description": "Category of activity" }
+      },
+      "required": ["tripId", "title", "startTime"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "A financial transaction related to a trip.",
+      "type": "object",
+      "properties": {
+        "tripId": { "type": "string", "description": "Reference to the trip" },
+        "itineraryItemId": { "type": "string", "description": "Optional reference to a specific activity" },
+        "amount": { "type": "number", "description": "Amount spent" },
+        "currency": { "type": "string", "description": "Currency code" },
+        "category": { "type": "string", "enum": ["transport", "food", "accommodation", "shopping", "other"], "description": "Expense category" },
+        "description": { "type": "string", "description": "What was bought" },
+        "date": { "type": "string", "format": "date-time", "description": "When the expense occurred" }
+      },
+      "required": ["tripId", "amount", "category", "date"]
+    },
+    "ShoppingItem": {
+      "title": "Shopping Item",
+      "description": "An item to buy during the trip.",
+      "type": "object",
+      "properties": {
+        "item": { "type": "string", "description": "Name of the item" },
+        "completed": { "type": "boolean", "description": "Whether the item has been bought" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["item", "completed"]
+    }
+  },
+  "firestore": {
+    "/trips/{tripId}": {
+      "schema": "Trip",
+      "description": "User trips"
+    },
+    "/trips/{tripId}/itinerary/{itemId}": {
+      "schema": "ItineraryItem",
+      "description": "Activities for a trip"
+    },
+    "/trips/{tripId}/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Expenses for a trip"
+    },
+    "/trips/{tripId}/shopping/{itemId}": {
+      "schema": "ShoppingItem",
+      "description": "Shopping list for a trip"
+    }
+  }
+}

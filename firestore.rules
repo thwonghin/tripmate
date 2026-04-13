@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: trips
+    // Fields: name (string), startDate (timestamp), endDate (timestamp), budget (number), ownerId (string), createdAt (timestamp)
+    //
+    // Collection: trips/{tripId}/itinerary
+    // Fields: tripId (string), title (string), startTime (timestamp), endTime (timestamp), location (string), notes (string), type (string)
+    //
+    // Collection: trips/{tripId}/expenses
+    // Fields: tripId (string), amount (number), category (string), description (string), date (timestamp)
+    //
+    // Collection: trips/{tripId}/shopping
+    // Fields: item (string), completed (boolean), createdAt (timestamp)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isCollaborator(tripData) {
+      return isAuthenticated() && 
+             request.auth.token.email != null && 
+             tripData.get('collaboratorEmails', []).hasAny([request.auth.token.email.lower()]);
+    }
+
+    function isTripOwner(tripId) {
+      let trip = get(/databases/$(database)/documents/trips/$(tripId)).data;
+      let isOwner = trip.ownerId == request.auth.uid;
+      let isCollab = request.auth.token.email != null && 
+                     trip.get('collaboratorEmails', []).hasAny([request.auth.token.email.lower()]);
+      return isAuthenticated() && (isOwner || isCollab);
+    }
+
+    function isValidTrip(data) {
+      return data.keys().hasAll(['name', 'startDate', 'endDate', 'ownerId', 'baseCurrency']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.startDate is timestamp &&
+             data.endDate is timestamp &&
+             data.baseCurrency is string && data.baseCurrency.size() == 3 &&
+             (data.budget == null || data.budget is number);
+    }
+
+    function isValidItineraryItem(data) {
+      return data.keys().hasAll(['tripId', 'title', 'startTime']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.startTime is timestamp &&
+             (data.endTime == null || data.endTime is timestamp) &&
+             data.type in ['flight', 'hotel', 'activity', 'transport', 'food'];
+    }
+
+    function isValidExpense(data) {
+      return data.keys().hasAll(['tripId', 'amount', 'category', 'date']) &&
+             data.amount is number && data.amount >= 0 &&
+             data.category in ['transport', 'food', 'accommodation', 'shopping', 'other'] &&
+             data.date is timestamp;
+    }
+
+    function isValidShoppingItem(data) {
+      return data.keys().hasAll(['item', 'completed']) &&
+             data.item is string && data.item.size() > 0 && data.item.size() < 200 &&
+             data.completed is bool;
+    }
+
+    // Trips
+    match /trips/{tripId} {
+      allow read: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid || isCollaborator(resource.data)
+      );
+      allow create: if isAuthenticated() && isValidTrip(request.resource.data) && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isCollaborator(resource.data)) 
+                    && isValidTrip(request.resource.data) && request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+
+      // Itinerary
+      match /itinerary/{itemId} {
+        allow read: if isTripOwner(tripId);
+        allow create: if isTripOwner(tripId) && isValidItineraryItem(request.resource.data);
+        allow update: if isTripOwner(tripId) && isValidItineraryItem(request.resource.data);
+        allow delete: if isTripOwner(tripId);
+      }
+
+      // Expenses
+      match /expenses/{expenseId} {
+        allow read: if isTripOwner(tripId);
+        allow create: if isTripOwner(tripId) && isValidExpense(request.resource.data);
+        allow update: if isTripOwner(tripId) && isValidExpense(request.resource.data);
+        allow delete: if isTripOwner(tripId);
+      }
+
+      // Shopping List
+      match /shopping/{itemId} {
+        allow read: if isTripOwner(tripId);
+        allow create: if isTripOwner(tripId) && isValidShoppingItem(request.resource.data);
+        allow update: if isTripOwner(tripId) && isValidShoppingItem(request.resource.data);
+        allow delete: if isTripOwner(tripId);
+      }
+    }
+    
+    // User Profile (for basic info)
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}
