@@ -24,17 +24,19 @@ import { motion, AnimatePresence } from 'motion/react';
 import { format, addDays, startOfDay, isSameDay, parseISO, isBefore, addHours, isWithinInterval, endOfDay } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { 
-  collection, 
-  addDoc, 
-  onSnapshot, 
-  query, 
-  where, 
-  orderBy, 
-  deleteDoc, 
-  doc, 
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  deleteDoc,
+  doc,
   Timestamp,
   updateDoc,
-  or
+  or,
+  setDoc,
+  getDocs,
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -81,8 +83,8 @@ interface Trip {
   budget: number;
   baseCurrency: string;
   ownerId: string;
-  collaborators?: string[];
   collaboratorEmails?: string[];
+  collaboratorIds?: string[];
 }
 
 interface ItineraryItem {
@@ -194,9 +196,12 @@ export default function App() {
 
   // Auth
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       setLoading(false);
+      if (u) {
+        await setDoc(doc(db, 'users', u.uid), { email: u.email?.toLowerCase() }, { merge: true });
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -227,12 +232,11 @@ export default function App() {
       return;
     }
 
-    const emailLower = user.email?.toLowerCase() || '';
     const tripsQ = query(
       collection(db, 'trips'),
       or(
         where('ownerId', '==', user.uid),
-        where('collaboratorEmails', 'array-contains', emailLower)
+        where('collaboratorIds', 'array-contains', user.uid)
       )
     );
 
@@ -463,9 +467,16 @@ export default function App() {
         toast.error('該用戶已在協作者名單中');
         return;
       }
-      await updateDoc(doc(db, 'trips', selectedTrip.id), {
-        collaboratorEmails: [...currentEmails, emailToAdd]
-      });
+      const usersSnap = await getDocs(query(collection(db, 'users'), where('email', '==', emailToAdd)));
+      const currentIds = selectedTrip.collaboratorIds || [];
+      const updates: Record<string, unknown> = {
+        collaboratorEmails: [...currentEmails, emailToAdd],
+      };
+      if (!usersSnap.empty) {
+        const collaboratorUid = usersSnap.docs[0].id;
+        updates.collaboratorIds = [...currentIds, collaboratorUid];
+      }
+      await updateDoc(doc(db, 'trips', selectedTrip.id), updates);
       toast.success('已新增協作者！');
       setShareEmail('');
       setIsShareDialogOpen(false);
@@ -478,9 +489,16 @@ export default function App() {
     if (!selectedTrip) return;
     try {
       const currentEmails = selectedTrip.collaboratorEmails || [];
-      await updateDoc(doc(db, 'trips', selectedTrip.id), {
-        collaboratorEmails: currentEmails.filter(e => e !== email)
-      });
+      const updates: Record<string, unknown> = {
+        collaboratorEmails: currentEmails.filter(e => e !== email),
+      };
+      const usersSnap = await getDocs(query(collection(db, 'users'), where('email', '==', email)));
+      if (!usersSnap.empty) {
+        const collaboratorUid = usersSnap.docs[0].id;
+        const currentIds = selectedTrip.collaboratorIds || [];
+        updates.collaboratorIds = currentIds.filter(id => id !== collaboratorUid);
+      }
+      await updateDoc(doc(db, 'trips', selectedTrip.id), updates);
       toast.success('已移除協作者');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `trips/${selectedTrip.id}`);
