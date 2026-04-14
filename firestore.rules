@@ -75,11 +75,16 @@ service cloud.firestore {
     // Trips
     match /trips/{tripId} {
       allow read: if isAuthenticated() && (
-        resource.data.ownerId == request.auth.uid || isCollaborator(resource.data)
+        resource.data.ownerId == request.auth.uid ||
+        isCollaborator(resource.data) ||
+        request.auth.uid in resource.data.get('collaboratorIds', [])
       );
       allow create: if isAuthenticated() && isValidTrip(request.resource.data) && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isCollaborator(resource.data)) 
-                    && isValidTrip(request.resource.data) && request.resource.data.ownerId == resource.data.ownerId;
+      allow update: if isAuthenticated() && (
+                      resource.data.ownerId == request.auth.uid ||
+                      isCollaborator(resource.data) ||
+                      request.auth.uid in resource.data.get('collaboratorIds', [])
+                    ) && isValidTrip(request.resource.data) && request.resource.data.ownerId == resource.data.ownerId;
       allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
 
       // Itinerary
@@ -109,7 +114,8 @@ service cloud.firestore {
     
     // User Profile (for basic info)
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
     }
   }
 }
