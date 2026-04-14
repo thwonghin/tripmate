@@ -236,7 +236,8 @@ export default function App() {
       collection(db, 'trips'),
       or(
         where('ownerId', '==', user.uid),
-        where('collaboratorIds', 'array-contains', user.uid)
+        where('collaboratorIds', 'array-contains', user.uid),
+        where('collaboratorEmails', 'array-contains', user.email?.toLowerCase() ?? '')
       )
     );
 
