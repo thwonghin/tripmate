@@ -29,7 +29,10 @@ npm-debug.log*
 
 # Firebase
 .firebase/
+.agents/
+.claude/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
 firebase-applet-config.json
+skills-lock.json
